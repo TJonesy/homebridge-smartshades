@@ -10,7 +10,6 @@
     "homebridge- NEO Smart Shades"
   ],
   "repository": "github:TJonesy/homebridge-smartshades",
-  
   "bugs": {
     "url": "https://github.com/TJonesy/homebridge-smartshades/issues"
   },
@@ -19,8 +18,9 @@
     "homebridge": ">=1.6.0"
   },
   "dependencies": {
-    "queue": "=6.0.2",
-    "mqtt": "^5.1.0"
+    "homebridge-config-ui-x": "^4.50.6",
+    "mqtt": "^5.1.0",
+    "queue": "=6.0.2"
   },
   "devDependencies": {
     "@types/node": "^18.16.20",
