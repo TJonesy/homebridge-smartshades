@@ -35,6 +35,25 @@
                 "title": "NEO Smart Blinds Controller ID",
                 "type": "string"
             },
+            "mqttUrl": {
+                "type": "string",
+                "title": "URL",
+				"required": false,
+                "description": "URL of MQTT server (optional), default: mqtt://localhost:1883",
+                "placeholder": "mqtt://localhost:1883"
+            },
+            "mqttUsername": {
+                "type": "string",
+                "required": false,
+                "title": "Username",
+                "description": "Username for MQTT server (optional)"
+            },
+            "mqttPassword": {
+                "type": "string",
+                "required": false,
+                "title": "Password",
+                "description": "Password for MQTT server (optional)"
+            },
 			"shades":{
 				"title":"Shade Information",
 				"type":"array",
@@ -44,7 +63,24 @@
 					"type":"object",
 					"properties": {
 						"name": { "title": "Name of the Window Blind", "type": "string" },
-						"code": { "title": "Blind Code", "type": "string" }
+						"code": { "title": "Blind Code", "type": "string" },
+						"positionSensorType": { 
+                            "title": "Position Sensor Type",
+                            "type": "string", 
+                            "default": "none",
+                            "oneOf": [
+                                { "title": "None", "enum": ["none"] },
+                                { "title": "MQTT", "enum": ["mqtt"] }
+                            ]
+                        },
+						"positionSensorTopic": { 
+                            "title": "Position Sensor Topic", 
+                            "type": "string", 
+                            "condition": {
+                                "functionBody": "return model.shades[arrayIndices].positionSensorTopic === 'mqtt"
+                            },
+                            "required": false
+                        }
 					}
 				}
 			}

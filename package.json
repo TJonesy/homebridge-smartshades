@@ -19,6 +19,7 @@
     "homebridge": ">=1.4.0"
   },
   "dependencies": {
-    "queue": "=6.0.2"
+    "queue": "=6.0.2",
+    "mqtt": "^4.3.2"
   }
 }

@@ -1,6 +1,7 @@
 'use strict';
 var net = require('net');
 const pkg = require("./package.json");
+const mqtt = require( "mqtt" );
 const queue = require("queue");
 
 var sendQueue = queue({autostart:true, concurrency:1})
@@ -28,10 +29,18 @@ module.exports = function (homebridge) {
 function NEOShadePlatform(log, config, api) {
 	this.log = log;
     this.config = config;
+	this.mqttClient;
 
 	globals.log = log; 
 	globals.platformConfig = config; // Platform variables from config.json
 	globals.api = api; // _accessories, _platforms, _configurableAccessories, _dynamicPlatforms, version, serverVersion, user, hap, hapLegacyTypes,platformAccessory,_events, _eventsCount
+	  
+	if (this.config?.shades?.some((element) => element.positionSensorType === "mqtt") === true && this.config?.mqttHost) {
+		mqttClient = mqtt.connect(this.config.mqttHost, options={
+			"username": platformConfig.mqttUsername,
+			"password": platformCOnfig.mqttPassword
+		})
+	}
 }
 
 
@@ -46,7 +55,7 @@ NEOShadePlatform.prototype = {
 			globals.log("Setting up shade with config.json data set to:" + JSON.stringify(currentShade));
 
 			try  {
-				var accessory = new NEOShadeAccessory(that.log, that.config, currentShade);
+				var accessory = new NEOShadeAccessory(that.log, that.config, that.mqttClient, currentShade);
 			} catch(error) {
 				console.log( "** Error ** creating new NEO Smart Shade in file index.js."); 
 				throw error
@@ -59,12 +68,15 @@ NEOShadePlatform.prototype = {
 	}
 }
 
-function NEOShadeAccessory(log, platformConfig, currentShade) {
+function NEOShadeAccessory(log, platformConfig, mqttClient, currentShade) {
     this.config = currentShade;
 	this.platformConfig = platformConfig
+	this.mqttClient = mqttClient;
     this.name = currentShade.name
     this.model = currentShade.motorType;
 	this.uuid_base = currentShade.code;
+	this.position_sensor_type = currentShade.positionSensorType;
+	this.position_sensor_topic = currentShade.positionSensorTopic;
 }
 
 NEOShadeAccessory.prototype = {
@@ -83,13 +95,17 @@ NEOShadeAccessory.prototype = {
 
 var setupShadeServices = function (that, services)
 {
+
 	function send(command) {
 			function sendfunction(cb) {
 				var telnetClient = net.createConnection(8839, that.platformConfig.host, ()=>  {
 						telnetClient.write(command +"\r", ()=>  {
 								var now = new Date();
 								console.log(`Sent Command: ${command} at time: ${now.toLocaleTimeString()}`) 
-								setTimeout( ()=> {cb()}, 500);
+								setTimeout( ()=> {
+								// TODO: Get Position here?
+									cb()
+								}, 500);
 							});
 					});
 			}
@@ -108,12 +124,34 @@ var setupShadeServices = function (that, services)
 		.setCharacteristic(Characteristic.SerialNumber, that.config.code )
 	
 	var thisService = new Service.WindowCovering()
+	mqttClient.subscribe(this.positionSensorTopic)
 	
 	var currentPosition = thisService.getCharacteristic(Characteristic.CurrentPosition)
 	var targetPosition = thisService.getCharacteristic(Characteristic.TargetPosition)
-	
+	// Todo: Get Position here?
 	currentPosition.value = 50;
 	targetPosition.value = 50;
+
+
+	function updatePosition() {
+		if (this.positionSensorType === "mqtt") {
+			mqttClient.send(this.config.positionSensorTopic + "/get");
+		} else {
+			targetPosition.updateValue(50);
+			currentPosition.updateValue(50)
+		}
+	}
+
+	if (this.positionSensorType === "mqtt") {
+		mqttClient.subscribe(this.config.positionSensorTopic, (topic, message) => {
+			// message is Buffer
+			console.log(topic.toString(), message.toString());
+			targetPosition.updateValue(message);
+			currentPosition.updateValue(message)
+		});
+	}
+
+	  updatePosition();
 	
 	targetPosition
 		.on('set', function(value, callback, context) {
@@ -121,8 +159,7 @@ var setupShadeServices = function (that, services)
 				case 0: // Close the Shade!
 					send(that.config.code + "-dn!" + (that.config.motorType ? that.config.motorType : "bf") )
 					setTimeout( function(){
-						targetPosition.updateValue(50);
-						currentPosition.updateValue(50)
+						updatePosition();
 					}, 25000);
 					break;
 				case 24:
@@ -130,8 +167,7 @@ var setupShadeServices = function (that, services)
 				case 26: // Move Shade to Favorite position!
 					send(that.config.code + "-gp" + (that.config.motorType ? that.config.motorType : "bf"))
 					setTimeout( function(){
-						targetPosition.updateValue(50);
-						currentPosition.updateValue(50)
+						updatePosition();
 					}, 25000);
 					break					
 					
@@ -140,8 +176,7 @@ var setupShadeServices = function (that, services)
 
 					// NEO controller doesn't detect actual position, reset shade after 20 seconds to show the user the shade is at half-position - i.e., neither up or down!
 					setTimeout( function(){
-						targetPosition.updateValue(50);
-						currentPosition.updateValue(50)
+						updatePosition();
 					}, 25000);
 					break;
 				default:

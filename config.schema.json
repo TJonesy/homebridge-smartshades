@@ -30,6 +30,25 @@
                 "title": "NEO Shades Controller ID",
                 "type": "string"
             },
+            "mqttUrl": {
+                "type": "string",
+                "title": "URL",
+				"required": false,
+                "description": "URL of MQTT server (optional), default: mqtt://localhost:1883",
+                "placeholder": "mqtt://localhost:1883"
+            },
+            "mqttUsername": {
+                "type": "string",
+                "required": false,
+                "title": "Username",
+                "description": "Username for MQTT server (optional)"
+            },
+            "mqttPassword": {
+                "type": "string",
+                "required": false,
+                "title": "Password",
+                "description": "Password for MQTT server (optional)"
+            },
 			"shades":{
 				"type":"array",
 				"items":{
@@ -61,7 +80,21 @@
 									{ "title": "Special Code Bofu Doya (Motor code by)", "enum": ["by"] },
 									{ "title": "Wistar and Alpha (Motor code wt)", "enum": ["wt"] }
 								]
-						}
+						},
+						"positionSensorType": { 
+                            "title": "Position Sensor Type",
+                            "type": "string", 
+                            "default": "none",
+                            "oneOf": [
+                                { "title": "None", "enum": ["none"] },
+                                { "title": "MQTT", "enum": ["mqtt"] }
+                            ]
+                        },
+						"positionSensorTopic": { 
+                            "title": "Position Sensor Topic", 
+                            "type": "string", 
+                            "required": false
+                        }
 					}
 				}
 			}
