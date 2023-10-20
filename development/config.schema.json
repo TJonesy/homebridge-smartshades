@@ -1,14 +1,14 @@
 {
-	"pluginAlias": "Smartshades",
-	"pluginType": "platform",
-	"singular": true,
-	"headerDisplay": "Use the settings below to configure the Homebridge-Smartshades Plugin. Changes are not applied until you click save at the bottom and restart Homebridge by clicking the power button in the main menu bar. Recommend clicking the \"Config\" button in the main menu bar to verify all values were entered properly.",
-	"footerDisplay": "For help please see the plugin [readme](https://github.com/jvmahon/homebridge-smartshades/).",
+    "pluginAlias": "Smartshades",
+    "pluginType": "platform",
+    "singular": true,
+    "headerDisplay": "Use the settings below to configure the Homebridge-Smartshades Plugin. Changes are not applied until you click save at the bottom and restart Homebridge by clicking the power button in the main menu bar. Recommend clicking the \"Config\" button in the main menu bar to verify all values were entered properly.",
+    "footerDisplay": "For help please see the plugin [readme](https://github.com/jvmahon/homebridge-smartshades/).",
     "schema": {
         "required": [
             "name",
             "host",
-			"controllerID"
+            "controllerID"
         ],
         "type": "object",
         "properties": {
@@ -17,8 +17,8 @@
                 "description": "Leave this as NEOShades",
                 "title": "Name",
                 "type": "string"
-            },            
-			"platform": {
+            },
+            "platform": {
                 "default": "NEOShades",
                 "description": "Leave this as NEOShades",
                 "title": "Platform",
@@ -38,7 +38,7 @@
             "mqttUrl": {
                 "type": "string",
                 "title": "URL",
-				"required": false,
+                "required": false,
                 "description": "URL of MQTT server (optional), default: mqtt://localhost:1883",
                 "placeholder": "mqtt://localhost:1883"
             },
@@ -54,37 +54,75 @@
                 "title": "Password",
                 "description": "Password for MQTT server (optional)"
             },
-			"shades":{
-				"title":"Shade Information",
-				"type":"array",
-				"required":true,
-				"items":{
-					"title":"Shades",
-					"type":"object",
-					"properties": {
-						"name": { "title": "Name of the Window Blind", "type": "string" },
-						"code": { "title": "Blind Code", "type": "string" },
-						"positionSensorType": { 
+            "shades": {
+                "title": "Shade Information",
+                "type": "array",
+                "required": true,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "title": "Name of the Window Blind",
+                            "type": "string"
+                        },
+                        "code": {
+                            "title": "Blind Code",
+                            "type": "string"
+                        },
+						"motorType": {
+							"title": "Motor Type",
+							"description": "Select the Motor code show in the NEO Smart Shades Controller App on this particular shade's control page.",
+							"type": "string",
+							"required": true,
+							"default": "bf",
+							"oneOf": [
+									{ "title": "A-OK version 1 (Motor code k1)", "enum": ["k1"] },
+									{ "title": "A-OK version 1 (Motor code k2)", "enum": ["k2"] },
+									{ "title": "Bofu - standard (Motor code bf)", "enum": ["bf"] },
+									{ "title": "Bofu - top-down, bottom-up (Motor code tb)", "enum": ["tb"] },
+									{ "title": "Bofu - vertical (Motor code vb)", "enum": ["vb"] },
+									{ "title": "Dooya Unidirectional (Motor code dy)", "enum": ["dy"] },
+									{ "title": "NEO (Motor code no)", "enum": ["no"] },
+									{ "title": "Nice (Motor code nc)", "enum": ["nc"] },
+									{ "title": "Raex (Motor code rx)", "enum": ["rx"] },
+									{ "title": "Special Code Bofu Doya (Motor code by)", "enum": ["by"] },
+									{ "title": "Wistar and Alpha (Motor code wt)", "enum": ["wt"] }
+								]
+						},
+                        "positionSensorType": {
                             "title": "Position Sensor Type",
-                            "type": "string", 
+                            "type": "string",
                             "default": "none",
                             "oneOf": [
-                                { "title": "None", "enum": ["none"] },
-                                { "title": "MQTT", "enum": ["mqtt"] }
+                                {
+                                    "title": "None",
+                                    "enum": [
+                                        "none"
+                                    ]
+                                },
+                                {
+                                    "title": "MQTT",
+                                    "enum": [
+                                        "mqtt"
+                                    ]
+                                }
                             ]
                         },
-						"positionSensorTopic": { 
-                            "title": "Position Sensor Topic", 
-                            "type": "string", 
+                        "positionSensorTopics": {
+                            "title": "Position Sensor Topics",
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
                             "condition": {
                                 "functionBody": "return model.shades[arrayIndices].positionSensorTopic === 'mqtt"
                             },
-                            "required": false
+                            "required": false,
+                            "description": "Topics to use for position sensor. It is assumed sensors are evenly placed listed from the bottom up."
                         }
-					}
-				}
-			}
-		}
-	}
+                    }
+                }
+            }
+        }
+    }
 }
-

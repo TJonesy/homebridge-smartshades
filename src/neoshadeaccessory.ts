@@ -5,47 +5,65 @@ import { NeoShadePlatform } from './neoshadeplatform';
 
 import * as net from 'net';
 import Queue, { QueueWorkerCallback } from 'queue';
+
+export interface ShadeConfig {
+  name: string;
+  code: string;
+  motorType: string;
+  positionSensorType: string;
+  positionSensorTopics?: Array<string>;
+}
+
 export class NEOShadeAccessory {
   private service: Service;
 
-  private sendQueue: Queue = Queue({autostart:true, concurrency:1});
+  private readonly config: ShadeConfig = this.accessory.context.config;
+
+  private readonly sendQueue: Queue = Queue({ autostart: true, concurrency: 1 });
+  private readonly Characteristic: typeof Characteristic = this.platform.Characteristic;
+  private readonly Service: typeof Service = this.platform.Service;
+  private readonly Topics: Array<string> = this.config.positionSensorTopics ?? [];
 
   constructor(
-        private readonly platform: NeoShadePlatform,
-        private readonly accessory: PlatformAccessory,
+    private readonly platform: NeoShadePlatform,
+    private readonly accessory: PlatformAccessory,
   ) {
-        this.accessory.getService(this.platform.Service.AccessoryInformation)!
-          .setCharacteristic(this.platform.Characteristic.Manufacturer, 'NEO Smart')
-          .setCharacteristic(this.platform.Characteristic.Model, 'Roller Shade')
-          .setCharacteristic(this.platform.Characteristic.Name, this.accessory.context.config.name )
-          .setCharacteristic(this.platform.Characteristic.SerialNumber, this.accessory.context.config.code );
-        this.accessory.getService(this.platform.Service.WindowCovering) || this.accessory.addService(this.platform.Service.WindowCovering);
-        this.service = this.accessory.getService(this.platform.Service.WindowCovering)
-            || this.accessory.addService(this.platform.Service.WindowCovering);
+    this.accessory.getService(this.Service.AccessoryInformation)!
+      .setCharacteristic(this.Characteristic.Manufacturer, 'NEO Smart')
+      .setCharacteristic(this.Characteristic.Model, 'Roller Shade')
+      .setCharacteristic(this.Characteristic.Name, this.config.name)
+      .setCharacteristic(this.Characteristic.SerialNumber, this.config.code);
 
-        this.service.updateCharacteristic(this.platform.Characteristic.PositionState, this.platform.Characteristic.PositionState.STOPPED);
-        this.service.setCharacteristic(this.platform.Characteristic.CurrentPosition, 50);
-        this.service.setCharacteristic(this.platform.Characteristic.TargetPosition, 50);
-        this.service.getCharacteristic(this.platform.Characteristic.TargetPosition).onSet(this.setTargetPosition.bind(this))
+    this.service = this.accessory.getService(this.Service.WindowCovering) || this.accessory.addService(this.Service.WindowCovering);
 
-        if(this.accessory.context.config.positionSensorType === 'mqtt') {
-          this.platform.mqttLib?.subscribe(this.accessory.context.config.positionSensorTopic, this.handleUpdate.bind(this));
-        }
+    this.service.updateCharacteristic(this.Characteristic.PositionState, this.Characteristic.PositionState.STOPPED);
+    this.service.setCharacteristic(this.Characteristic.CurrentPosition, 50);
+    this.service.setCharacteristic(this.Characteristic.TargetPosition, 50);
+    this.service.getCharacteristic(this.Characteristic.TargetPosition).onSet(this.setTargetPosition.bind(this));
+
+    if (this.config.positionSensorType === 'mqtt') {
+      this.Topics.forEach((topic: string) => {
+        this.platform.mqttLib?.subscribe(topic, this.handleUpdate.bind(this));
+      });
+    }
   }
 
   async handleUpdate(topic: string, message: string): Promise<void> {
     this.platform.log.debug('Received message:\n  topic: ' + topic + '\n  message: ' + message);
-    this.service.updateCharacteristic(this.platform.Characteristic.CurrentPosition, parseInt(message));
-    this.service.updateCharacteristic(this.platform.Characteristic.TargetPosition, parseInt(message));
+    const contact: boolean = JSON.parse(message).contact;
+    if (contact) {
+      const position = this.Topics.indexOf(topic) * 100.0 / (this.Topics.length - 1);
+      this.service.updateCharacteristic(this.Characteristic.CurrentPosition, position);
+    }
   }
 
   async send(command: string) {
     this.sendQueue.push(((cb?: QueueWorkerCallback) => {
-      const telnetClient = net.createConnection(8839, this.platform.config.host, ()=> {
-        telnetClient.write(command +'\r', ()=> {
+      const telnetClient = net.createConnection(8839, this.platform.config.host, () => {
+        telnetClient.write(command + '\r', () => {
           const now = new Date();
           this.platform.log.debug(`Sent Command: ${command} at time: ${now.toLocaleTimeString()}`);
-          setTimeout( ()=> {
+          setTimeout(() => {
             this.updatePosition();
             if (cb) {
               cb();
@@ -57,54 +75,58 @@ export class NEOShadeAccessory {
   }
 
   async updatePosition() {
-    this.service.updateCharacteristic(this.platform.Characteristic.PositionState, this.platform.Characteristic.PositionState.STOPPED);
-    if (this.accessory.context.config.positionSensorType === 'mqtt') {
-      this.platform.mqttLib?.send(this.accessory.context.config.positionSensorTopic + '/get', '');
+    this.service.updateCharacteristic(this.Characteristic.PositionState, this.Characteristic.PositionState.STOPPED);
+    if (this.config.positionSensorType === 'mqtt') {
+      this.Topics.forEach((topic: string) => {
+        this.platform.mqttLib?.send(topic + '/get', '');
+      });
     } else {
-      // NEO controller doesn't detect actual position,
+      // NEO controller doesn't natively detect actual position,
       //    reset shade after 20 seconds to show the user the shade is at half-position - i.e., neither up or down!
-      this.service.updateCharacteristic(this.platform.Characteristic.CurrentPosition, 50);
-      this.service.updateCharacteristic(this.platform.Characteristic.TargetPosition, 50);
+      this.service.updateCharacteristic(this.Characteristic.CurrentPosition, 50);
+      this.service.updateCharacteristic(this.Characteristic.TargetPosition, 50);
     }
   }
 
 
 
   async setTargetPosition(value: CharacteristicValue): Promise<void> {
-    this.platform.log.debug("New target position: " + (value as number))
+    this.platform.log.debug('New target position: ' + (value as number));
     const target = value as number;
-    switch(target) {
+    switch (target) {
       case 0: // Close the Shade!
-      this.service.updateCharacteristic(this.platform.Characteristic.PositionState, this.platform.Characteristic.PositionState.DECREASING);
+        this.service.updateCharacteristic(
+          this.Characteristic.PositionState,
+          this.Characteristic.PositionState.DECREASING);
         this.send(
-          this.accessory.context.config.code + '-dn!' +
-            (this.accessory.context.config.motorType ? this.accessory.context.config.motorType : 'bf'),
+          this.config.code + '-dn!' +
+          (this.config.motorType ? this.config.motorType : 'bf'),
         );
-        setTimeout( this.updatePosition.bind(this), 25000);
+        setTimeout(this.updatePosition.bind(this), 25000);
         break;
       case 24:
       case 25:
       case 26: // Move Shade to Favorite position!
-        if (this.service.getCharacteristic(this.platform.Characteristic.CurrentPosition).value as number > 25) {
-            this.service.updateCharacteristic(this.platform.Characteristic.PositionState, this.platform.Characteristic.PositionState.DECREASING);
+        if (this.service.getCharacteristic(this.Characteristic.CurrentPosition).value as number > 25) {
+          this.service.updateCharacteristic(this.Characteristic.PositionState, this.Characteristic.PositionState.DECREASING);
         } else {
-            this.service.updateCharacteristic(this.platform.Characteristic.PositionState, this.platform.Characteristic.PositionState.INCREASING);
+          this.service.updateCharacteristic(this.Characteristic.PositionState, this.Characteristic.PositionState.INCREASING);
         }
         this.send(
-          this.accessory.context.config.code + '-gp' +
-            (this.accessory.context.config.motorType ? this.accessory.context.config.motorType : 'bf'),
+          this.config.code + '-gp' +
+          (this.config.motorType ? this.config.motorType : 'bf'),
         );
-        setTimeout( this.updatePosition.bind(this), 25000);
+        setTimeout(this.updatePosition.bind(this), 25000);
         break;
 
       case 100: // Open the shade
-        this.service.updateCharacteristic(this.platform.Characteristic.PositionState, this.platform.Characteristic.PositionState.INCREASING);
+        this.service.updateCharacteristic(this.Characteristic.PositionState, this.Characteristic.PositionState.INCREASING);
         this.send(
-          this.accessory.context.config.code + '-up!' +
-            (this.accessory.context.config.motorType ? this.accessory.context.config.motorType : 'bf'),
+          this.config.code + '-up!' +
+          (this.config.motorType ? this.config.motorType : 'bf'),
         );
 
-        setTimeout( this.updatePosition.bind(this), 25000);
+        setTimeout(this.updatePosition.bind(this), 25000);
         break;
       default:
         // Do nothing if any ohter value is selected!

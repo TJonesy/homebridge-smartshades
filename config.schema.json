@@ -81,18 +81,28 @@
 									{ "title": "Wistar and Alpha (Motor code wt)", "enum": ["wt"] }
 								]
 						},
-						"positionSensorType": { 
+                        "positionSensorType": {
                             "title": "Position Sensor Type",
-                            "type": "string", 
+                            "type": "string",
                             "default": "none",
                             "oneOf": [
-                                { "title": "None", "enum": ["none"] },
-                                { "title": "MQTT", "enum": ["mqtt"] }
+                                {
+                                    "title": "MQTT",
+                                    "enum": [
+                                        "mqtt"
+                                    ]
+                                }
                             ]
                         },
-						"positionSensorTopic": { 
-                            "title": "Position Sensor Topic", 
-                            "type": "string", 
+                        "positionSensorTopics": {
+                            "title": "Position Sensor Topics",
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "condition": {
+                                "functionBody": "return model.shades[arrayIndices].positionSensorTopic === 'mqtt"
+                            },
                             "required": false
                         }
 					}

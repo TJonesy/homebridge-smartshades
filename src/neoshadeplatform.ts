@@ -1,41 +1,7 @@
 import { API, DynamicPlatformPlugin, Logger, PlatformAccessory, PlatformConfig, Service, Characteristic } from 'homebridge';
-import { MqttClient, connect, Packet } from 'mqtt';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings';
-import { NEOShadeAccessory } from './neoshadeaccessory';
-
-export class MqttLib {
-  private client: MqttClient;
-  private readonly callbacks: Map<string, ((topic: string, message: string) => Promise<void>)[]> = new Map();
-  constructor(private readonly log: Logger, host: string, username: string, password: string) {
-    this.client = connect(host, {
-      'username': username,
-      'password': password,
-    });
-    this.client.on('message', this.handleMessage.bind(this));
-    this.client.on('connect', () => this.log.info("Connected to MQTT"))
-    this.client.on('error', (error) => this.log.error("MQTT Error:" + error.message))
-  }
-
-  async send(topic: string, message: string): Promise<Packet | undefined> {
-    this.log.debug("Sending message: " + topic.toString(), message.toString())
-    return this.client.publishAsync(topic, message);
-  }
-
-  private async handleMessage(topic: string, message: Buffer) {
-    this.log.debug("Received message: " + topic.toString(), message.toString())
-    this.callbacks.get(topic)?.forEach(cb => cb(topic, message.toString()));
-  }
-
-  async subscribe(topic: string, cb: (topic: string, message: string) => Promise<void>): Promise<void> {
-    this.log.info("Subscribing to topic: " + topic);
-    if (!this.callbacks.has(topic)) {
-      this.callbacks.set(topic, [cb]);
-    } else {
-      this.callbacks.get(topic)?.push(cb);
-    }
-    this.client.subscribe(topic);
-  }
-}
+import { NEOShadeAccessory, ShadeConfig } from './neoshadeaccessory';
+import { MqttLib } from './lib/mqtt';
 
 export class NeoShadePlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service = this.api.hap.Service;
@@ -46,14 +12,14 @@ export class NeoShadePlatform implements DynamicPlatformPlugin {
   public mqttLib: MqttLib | null;
 
   constructor(
-        public readonly log: Logger,
-        public readonly config: PlatformConfig,
-        public readonly api: API,
+    public readonly log: Logger,
+    public readonly config: PlatformConfig,
+    public readonly api: API,
   ) {
     this.log.debug('Finished initializing platform:', this.config.name);
 
-    if (this.config.shades?.some((element) => element.positionSensorType === 'mqtt') === true && this.config.mqttUrl) {
-      this.log.debug("Connecting to mqtt");
+    if (this.config.shades?.some((element: ShadeConfig) => element.positionSensorType === 'mqtt') === true && this.config.mqttUrl) {
+      this.log.debug('Connecting to mqtt');
       this.mqttLib = new MqttLib(
         log,
         this.config.mqttUrl,
@@ -61,7 +27,7 @@ export class NeoShadePlatform implements DynamicPlatformPlugin {
         this.config.mqttPassword,
       );
     } else {
-      this.log.info("Not connecting to mqtt");
+      this.log.info('Not connecting to mqtt');
       this.mqttLib = null;
     }
 
@@ -92,9 +58,9 @@ export class NeoShadePlatform implements DynamicPlatformPlugin {
 
     this.log.debug('Configuring NEOSmartPlatform:');
 
-    this.config?.shades?.forEach((currentShade => {
+    this.config?.shades?.forEach(((currentShade: ShadeConfig) => {
 
-      const uuid = this.api.hap.uuid.generate(currentShade.code);
+      const uuid: string = this.api.hap.uuid.generate(currentShade.code);
       this.log.debug('Setting up shade ' + uuid + ' with config.json data set to:' + JSON.stringify(currentShade));
       const existingAccessory = this.accessories.find(accessory => accessory.UUID === uuid);
 
@@ -110,8 +76,8 @@ export class NeoShadePlatform implements DynamicPlatformPlugin {
           new NEOShadeAccessory(this, accessory);
           this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
         }
-      } catch(error) {
-        this.log.error( '** Error ** creating new NEO Smart Shade in file index.js.');
+      } catch (error) {
+        this.log.error('** Error ** creating new NEO Smart Shade in file index.js.');
         throw error;
       }
 
