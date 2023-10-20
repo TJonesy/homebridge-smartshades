@@ -1,6 +1,6 @@
 
 
-import { PlatformAccessory, Service, CharacteristicValue, Characteristic } from 'homebridge';
+import { PlatformAccessory, Service, CharacteristicValue, Characteristic, Nullable } from 'homebridge';
 import { NeoShadePlatform } from './neoshadeplatform';
 
 import * as net from 'net';
@@ -36,10 +36,10 @@ export class NEOShadeAccessory {
 
     this.service = this.accessory.getService(this.Service.WindowCovering) || this.accessory.addService(this.Service.WindowCovering);
 
-    this.service.updateCharacteristic(this.Characteristic.PositionState, this.Characteristic.PositionState.STOPPED);
-    this.service.setCharacteristic(this.Characteristic.CurrentPosition, 50);
-    this.service.setCharacteristic(this.Characteristic.TargetPosition, 50);
-    this.service.getCharacteristic(this.Characteristic.TargetPosition).onSet(this.setTargetPosition.bind(this));
+    this.setPositionState(this.Characteristic.PositionState.STOPPED);
+    this.setPosition(50);
+    this.setTargetPosition(50);
+    this.service.getCharacteristic(this.Characteristic.TargetPosition).onSet(this.updateTargetPosition.bind(this));
 
     if (this.config.positionSensorType === 'mqtt') {
       this.Topics.forEach((topic: string) => {
@@ -48,12 +48,47 @@ export class NEOShadeAccessory {
     }
   }
 
+  setPositionState(positionState: CharacteristicValue): void {
+    this.service.updateCharacteristic(this.Characteristic.PositionState, positionState);
+  }
+
+  getPositionState(): Nullable<CharacteristicValue> {
+    return this.service.getCharacteristic(this.Characteristic.PositionState).value;
+  }
+
+  setTargetPosition(position: number): void {
+    this.service.updateCharacteristic(this.Characteristic.TargetPosition, position);
+  }
+
+  getTargetPosition(): Nullable<CharacteristicValue> {
+    return this.service.getCharacteristic(this.Characteristic.TargetPosition).value;
+  }
+
+  setPosition(position: number): void {
+    this.service.updateCharacteristic(this.Characteristic.CurrentPosition, position);
+  }
+
+  getPosition(): Nullable<CharacteristicValue> {
+    return this.service.getCharacteristic(this.Characteristic.CurrentPosition).value;
+  }
+
   async handleUpdate(topic: string, message: string): Promise<void> {
     this.platform.log.debug('Received message:\n  topic: ' + topic + '\n  message: ' + message);
+
     const contact: boolean = JSON.parse(message).contact;
+
+    const multiplier: number = 100.0 / (this.Topics.length - 1);
+    const contact_position = this.Topics.indexOf(topic) * multiplier;
+
     if (contact) {
-      const position = this.Topics.indexOf(topic) * 100.0 / (this.Topics.length - 1);
-      this.service.updateCharacteristic(this.Characteristic.CurrentPosition, position);
+      this.setPosition(contact_position);
+    } else if ( this.getPosition() === contact_position) {
+      const direction = this.getPositionState();
+      if (direction === this.Characteristic.PositionState.INCREASING) {
+        this.setPosition((this.Topics.indexOf(topic) + 0.5) * multiplier);
+      } else if (direction === this.Characteristic.PositionState.DECREASING) {
+        this.setPosition((this.Topics.indexOf(topic) - 0.5) * multiplier);
+      }
     }
   }
 
@@ -75,7 +110,7 @@ export class NEOShadeAccessory {
   }
 
   async updatePosition() {
-    this.service.updateCharacteristic(this.Characteristic.PositionState, this.Characteristic.PositionState.STOPPED);
+    this.setPositionState(this.Characteristic.PositionState.STOPPED);
     if (this.config.positionSensorType === 'mqtt') {
       this.Topics.forEach((topic: string) => {
         this.platform.mqttLib?.send(topic + '/get', '');
@@ -83,21 +118,19 @@ export class NEOShadeAccessory {
     } else {
       // NEO controller doesn't natively detect actual position,
       //    reset shade after 20 seconds to show the user the shade is at half-position - i.e., neither up or down!
-      this.service.updateCharacteristic(this.Characteristic.CurrentPosition, 50);
-      this.service.updateCharacteristic(this.Characteristic.TargetPosition, 50);
+      this.setPosition(50);
+      this.setTargetPosition(50);
     }
   }
 
 
 
-  async setTargetPosition(value: CharacteristicValue): Promise<void> {
+  async updateTargetPosition(value: CharacteristicValue): Promise<void> {
     this.platform.log.debug('New target position: ' + (value as number));
     const target = value as number;
     switch (target) {
       case 0: // Close the Shade!
-        this.service.updateCharacteristic(
-          this.Characteristic.PositionState,
-          this.Characteristic.PositionState.DECREASING);
+        this.setPositionState(this.Characteristic.PositionState.DECREASING);
         this.send(
           this.config.code + '-dn!' +
           (this.config.motorType ? this.config.motorType : 'bf'),
@@ -107,10 +140,10 @@ export class NEOShadeAccessory {
       case 24:
       case 25:
       case 26: // Move Shade to Favorite position!
-        if (this.service.getCharacteristic(this.Characteristic.CurrentPosition).value as number > 25) {
-          this.service.updateCharacteristic(this.Characteristic.PositionState, this.Characteristic.PositionState.DECREASING);
+        if (this.getPosition() as number > 25) {
+          this.setPositionState(this.Characteristic.PositionState.DECREASING);
         } else {
-          this.service.updateCharacteristic(this.Characteristic.PositionState, this.Characteristic.PositionState.INCREASING);
+          this.setPositionState(this.Characteristic.PositionState.INCREASING);
         }
         this.send(
           this.config.code + '-gp' +
@@ -120,7 +153,7 @@ export class NEOShadeAccessory {
         break;
 
       case 100: // Open the shade
-        this.service.updateCharacteristic(this.Characteristic.PositionState, this.Characteristic.PositionState.INCREASING);
+        this.setPositionState(this.Characteristic.PositionState.INCREASING);
         this.send(
           this.config.code + '-up!' +
           (this.config.motorType ? this.config.motorType : 'bf'),
